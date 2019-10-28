@@ -1,0 +1,136 @@
+# Source: istio/charts/nodeagent/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: istio-nodeagent-service-account
+  namespace: istio-system
+  labels:
+    app: nodeagent
+    chart: nodeagent
+    heritage: Tiller
+    release: istio
+---
+# Source: istio/charts/nodeagent/templates/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: istio-nodeagent-istio-system
+  labels:
+    app: nodeagent
+    chart: nodeagent
+    heritage: Tiller
+    release: istio
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get"]
+---
+# Source: istio/charts/nodeagent/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: istio-nodeagent-istio-system
+  labels:
+    app: nodeagent
+    chart: nodeagent
+    heritage: Tiller
+    release: istio
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: istio-nodeagent-istio-system
+subjects:
+  - kind: ServiceAccount
+    name: istio-nodeagent-service-account
+    namespace: istio-system
+---
+# Source: istio/charts/nodeagent/templates/daemonset.yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: istio-nodeagent
+  namespace: istio-system
+  labels:
+    app: nodeagent
+    chart: nodeagent
+    release: istio
+    heritage: Tiller
+    istio: nodeagent
+spec:
+  selector:
+    matchLabels:
+      istio: nodeagent
+  template:
+    metadata:
+      labels:
+        app: nodeagent
+        chart: nodeagent
+        release: istio
+        heritage: Tiller
+        istio: nodeagent
+      annotations:
+        sidecar.istio.io/inject: "false"
+    spec:
+      serviceAccountName: istio-nodeagent-service-account
+      containers:
+        - name: nodeagent
+          image: "docker.io/istio/node-agent-k8s:1.3.0"
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - mountPath: /var/run/sds
+              name: sdsudspath
+          env:
+            - name: CA_ADDR
+              value: "istio-citadel:8060"
+            - name: CA_PROVIDER
+              value: "Citadel"
+            - name: Plugins
+              value: ""
+            - name: VALID_TOKEN
+              value: "true"
+            - name: "Trust_Domain"
+              value: ""
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+      volumes:
+        - name: sdsudspath
+          hostPath:
+            path: /var/run/sds
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: beta.kubernetes.io/arch
+                    operator: In
+                    values:
+                      - "amd64"
+                      - "ppc64le"
+                      - "s390x"
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 2
+              preference:
+                matchExpressions:
+                  - key: beta.kubernetes.io/arch
+                    operator: In
+                    values:
+                      - "amd64"
+            - weight: 2
+              preference:
+                matchExpressions:
+                  - key: beta.kubernetes.io/arch
+                    operator: In
+                    values:
+                      - "ppc64le"
+            - weight: 2
+              preference:
+                matchExpressions:
+                  - key: beta.kubernetes.io/arch
+                    operator: In
+                    values:
+                      - "s390x"
+  updateStrategy:
+    type: RollingUpdate
+---
